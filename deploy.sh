@@ -164,31 +164,43 @@ dnf install -y iptables"
 modprobe ip_tables"
   fi
 
-     # debian requires setting unprivileged_userns_clone
-     # https://superuser.com/questions/1094597/enable-user-namespaces-in-debian-kernel
-     # https://security.stackexchange.com/questions/209529/what-does-enabling-kernel-unprivileged-userns-clone-do
-    if [ -f /proc/sys/kernel/unprivileged_userns_clone ]; then
-        if [ "1" != "$(cat /proc/sys/kernel/unprivileged_userns_clone)" ]; then
-            TIPS="${TIPS}
+  # debian requires setting unprivileged_userns_clone
+  # https://superuser.com/questions/1094597/enable-user-namespaces-in-debian-kernel
+  # https://security.stackexchange.com/questions/209529/what-does-enabling-kernel-unprivileged-userns-clone-do
+  if [ -f /proc/sys/kernel/unprivileged_userns_clone ]; then
+    if [ "1" != "$(cat /proc/sys/kernel/unprivileged_userns_clone)" ]; then
+      TIPS="${TIPS}
 cat <<EOT > /etc/sysctl.d/50-rootless.conf
 kernel.unprivileged_userns_clone = 1
 EOT
 sysctl --system"
-        fi
     fi
+  fi
 
+  # centos requires setting max_user_namespaces
+  # https://access.redhat.com/documentation/en-us/red_hat_enterprise_linux/8/html/building_running_and_managing_containers/starting-with-containers_building-running-and-managing-containers
 
+  if [ -f /proc/sys/user/max_user_namespaces ]; then
+    if [ "0" = "$(cat /proc/sys/user/max_user_namespaces)" ]; then
+      INSTRUCTIONS="${INSTRUCTIONS}
+cat <<EOT > /etc/sysctl.d/51-rootless.conf
+user.max_user_namespaces = 28633
+EOT
+sysctl --system"
+    fi
+  fi
 
-      if [ -n "$TIPS" ]; then
-        printf "# Missing required dependencies. Please run following commands to
+  if [ -n "$TIPS" ]; then
+    printf "# Missing required dependencies. Please run following commands to
 # install the dependencies and run this deployment script again.
-# Alternatively iptables checks can be disabled with SKIP_IPTABLES=1"
+# or can be disabled with SKIP_IPTABLES=1"
 
-        echo
-        printf "\n cat <<EOF | sudo sh -x $TIPS \n EOF"
-        echo
-        exit 1
-    fi
+    echo
+    printf "\n cat <<EOF | sudo sh -x $TIPS \n EOF"
+    echo
+    exit 1
+  fi
+
 
 }
 
