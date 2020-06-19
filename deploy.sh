@@ -10,10 +10,12 @@ Breset=$(tput sgr0)  # default text color
 
 ## version code can be found here
 ## https://docs.docker.com/engine/install/
-DEFAULT_VERSION="stable"
+DEFAULT_VERSION_VALUE="stable"
 if [ -z "$VERSION" ]; then
-  VERSION=$DEFAULT_DEFAULT_VERSION
+    VERSION=$DEFAULT_VERSION_VALUE
 fi
+
+echo $VERSION
 
 printf() {
   current_date_time="$(date +%m/%d/%Y/%H:%M:%S)"
@@ -21,24 +23,24 @@ printf() {
 }
 
 # The latest release is currently hard-coded.
-STABLE_VERSION="19.03.11"
+STABLE_LATEST="19.03.11"
 STABLE_RELEASE_URL=
 STABLE_RELEASE_ROOTLESS_URL=
 case "$VERSION" in
 "stable")
-  printf "Installing stable version ${STABLE_VERSION}"
-  STATIC_RELEASE_URL="https://download.docker.com/linux/static/$VERSION/$(uname -m)/docker-${STABLE_VERSION}.tgz"
-  STATIC_RELEASE_ROOTLESS_URL="https://download.docker.com/linux/static/$VERSION/$(uname -m)/docker-rootless-extras-${STABLE_VERSION}.tgz"
-  ;;
+    printf "# Installing stable version ${STABLE_LATEST}"
+    STABLE_RELEASE_URL="https://download.docker.com/linux/static/$VERSION/$(uname -m)/docker-${STABLE_LATEST}.tgz"
+    STABLE_RELEASE_ROOTLESS_URL="https://download.docker.com/linux/static/$VERSION/$(uname -m)/docker-rootless-extras-${STABLE_LATEST}.tgz"
+    ;;
 "nightly")
-  printf "Installing nightly"
-  STABLE_RELEASE_URL="https://master.dockerproject.org/linux/$(uname -m)/docker.tgz"
-  STABLE_RELEASE_ROOTLESS_URL="https://master.dockerproject.org/linux/$(uname -m)/docker-rootless-extras.tgz"
-  ;;
+    printf "# Installing nightly"
+    STABLE_RELEASE_URL="https://master.dockerproject.org/linux/$(uname -m)/docker.tgz"
+    STABLE_RELEASE_ROOTLESS_URL="https://master.dockerproject.org/linux/$(uname -m)/docker-rootless-extras.tgz"
+    ;;
 *)
-  printf >&2 "Exiting because of unknown VERSION \"$VERSION\". Set \$VERSION to either \"stable\" or \"nightly\"."
-  exit 1
-  ;;
+    printf >&2 "Aborting because of unknown VERSION \"$VERSION\". Set \$VERSION to either \"stable\" or \"nightly\"."
+    exit 1
+    ;;
 esac
 
 init() {
@@ -101,7 +103,7 @@ check_dependices() {
   ## https://unix.stackexchange.com/questions/462845/how-to-apply-lingering-immedeately
   ##
   # Validate XDG_RUNTIME_DIR
-  if [-z "$XDG_RUNTIME_DIR" ] || [ ! -w "$XDG_RUNTIME_DIR" ]; then
+  if [ -z "$XDG_RUNTIME_DIR" ] || [ ! -w "$XDG_RUNTIME_DIR" ]; then
     if [ -n "$SYSTEMD" ]; then
       printf >&2 "Exiting -> systemd was detected but XDG_RUNTIME_DIR (\"$XDG_RUNTIME_DIR\") does not exist or is not writable"
       printf >&2 "Hint: this could happen if you switched users with 'su' or 'sudo'. To work around this:"
@@ -350,7 +352,7 @@ install_docker() {
   # Extract zipped archieve to /home/ubuntu/bin
   (
     mkdir -p "$USER_BIN"
-    cd "$USERBIN"
+    cd "$USER_BIN"
     tar zxf "$tmp/docker.tgz" --strip-components=1
     tar zxf "$tmp/rootless.tgz" --strip-components=1
   )
@@ -363,7 +365,7 @@ install_docker_compose() {
   desc="$HOME/bin/docker-compose"
   curl -L "https://github.com/docker/compose/releases/download/1.26.0/docker-compose-$(uname -s)-$(uname -m)" -o "$desc"
   if [ ! -f $desc ]; then
-    printf "Download docker-compose failed, error code 365"
+    printf "Download docker-compose failed, error code 366"
     exit 1
   fi
   chmod +x $desc
@@ -394,15 +396,9 @@ main() {
     printf "Install docker-compose done"
   fi
 
-  # check if need to install git
-
-  if [ -x "$(command -v git)" ]; then
-    printf "git installed"
-
-  else
-    printf "missing git,please install it before running this script"
-    exit 1
-
-  fi
+  printf "Setting done, run source ~/.bashrc"
 
 }
+
+
+main
