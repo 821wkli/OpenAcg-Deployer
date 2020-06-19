@@ -200,11 +200,209 @@ sysctl --system"
     echo
     exit 1
   fi
+}
 
+## https://docs.docker.com/config/daemon/systemd/
+start_docker() {
+  # check if overlay is supported
+  ## https://unix.stackexchange.com/questions/75891/querying-an-overlayfs
+  tmpdir=$(mktemp -d)
+  mkdir -p $tmpdir/lower $tmpdir/upper $tmpdir/work $tmpdir/merged
+  if "$USER_BIN"/rootlesskit mount -t overlay overlay -olowerdir=$tmpdir/lower,upperdir=$tmpdir/upper,workdir=$tmpdir/work $tmpdir/merged >/dev/null 2>&1; then
+    USE_OVERLAY=1
+  fi
+  rm -rf "$tmpdir"
+
+  if [ -z "$SYSTEMD" ]; then
+    start_docker_nonsystemd
+    return
+  fi
+
+  mkdir -p $HOME/.config/systemd/user
+
+  DOCKERD_FLAGS="--experimental"
+
+  if [ -n "$SKIP_IPTABLES" ]; then
+    DOCKERD_FLAGS="$DOCKERD_FLAGS --iptables=false"
+  fi
+
+  if [ "$USE_OVERLAY" = "1" ]; then
+    DOCKERD_FLAGS="$DOCKERD_FLAGS --storage-driver=overlay2"
+  else
+    DOCKERD_FLAGS="$DOCKERD_FLAGS --storage-driver=vfs"
+  fi
+
+  CFG_DIR="$HOME/.config"
+  if [ -n "$XDG_CONFIG_HOME" ]; then
+    CFG_DIR="$XDG_CONFIG_HOME"
+  fi
+
+  if [ ! -f $CFG_DIR/systemd/user/docker.service ]; then
+    cat <<EOT >$CFG_DIR/systemd/user/docker.service
+[Unit]
+Description=Docker Engine
+[Service]
+Environment=PATH=$USER_BIN:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=$USER_BIN/dockerd-rootless.sh $DOCKERD_FLAGS
+ExecReload=/bin/kill -s HUP \$MAINPID
+TimeoutSec=0
+RestartSec=2
+Restart=always
+StartLimitBurst=3
+StartLimitInterval=60s
+LimitNOFILE=infinity
+LimitNPROC=infinity
+LimitCORE=infinity
+TasksMax=infinity
+Delegate=yes
+Type=simple
+[Install]
+WantedBy=default.target
+EOT
+    systemctl --user daemon-reload
+  fi
+  if ! systemctl --user status docker >/dev/null 2>&1; then
+    printf "# starting systemd service"
+    systemctl --user start docker
+  fi
+  systemctl --user status docker | cat
+
+  sleep 1
+  PATH="$USER_BIN:$PATH" DOCKER_HOST="unix://$XDG_RUNTIME_DIR/docker.sock" docker version
+}
+
+print_service_instructions() {
+  if [ -z "$SYSTEMD" ]; then
+    return
+  fi
+  cat <<EOT
+#
+# To control docker service run:
+# systemctl --user (start|stop|restart) docker
+#
+EOT
+}
+
+start_docker_nonsystemd() {
+  iptablesflag=
+  if [ -n "$SKIP_IPTABLES" ]; then
+    iptablesflag="--iptables=false "
+  fi
+  cat <<EOT
+# systemd not detected, dockerd daemon needs to be started manually
+$USER_BIN/dockerd-rootless.sh --experimental $iptablesflag--storage-driver vfs
+EOT
+}
+
+print_instructions() {
+  start_docker
+  printf "# Docker binaries are installed in $USER_BIN"
+  if [ "$(which $DAEMON)" != "$USER_BIN/$DAEMON" ]; then
+    printf "# WARN: dockerd is not in your current PATH or pointing to $USER_BIN/$DAEMON"
+  fi
+  printf "# Missing the following environment variables"
+
+  if [ -n "$XDG_RUNTIME_DIR_CREATED" ]; then
+    printf "set XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR ok"
+    echo "export XDG_RUNTIME_DIR=$XDG_RUNTIME_DIR" >>~/.bashrc
+  fi
+
+  case :$PATH: in
+  *:$USER_BIN:*) ;;
+  *)
+    printf "set PATH=$USER_BIN:$PATH ok"
+    echo "export PATH=$USER_BIN:$PATH" >>~/.bashrc
+
+    ;;
+  esac
+
+  # iptables is required but /sbin might not be in PATH
+  if [ -z "$SKIP_IPTABLES" ] && ! which iptables >/dev/null 2>&1; then
+    if [ -f /sbin/iptables ]; then
+      printf "set PATH=$PATH:/sbin ok"
+      echo "export PATH=$PATH:/sbin" >>~/.bashrc
+
+    elif [ -f /usr/sbin/iptables ]; then
+      printf "set PATH=$PATH:/usr/sbin ok "
+      echo "export PATH=$PATH:/usr/sbin" >>~/.bashrc
+
+    fi
+  fi
+
+  echo "export DOCKER_HOST=unix://$XDG_RUNTIME_DIR/docker.sock" >>~/.bashrc
+  printf "set DOCKER_HOST=unix://$XDG_RUNTIME_DIR/docker.sock ok"
+  echo
+  print_service_instructions
+}
+
+install_docker() {
+  init
+  check_dependices
+
+  tmp=$(mktemp -d)
+  trap "rm -rf $tmp" EXIT INT TERM
+  # Download docker distribution*
+  (
+    cd "$tmp"
+    curl -L -o docker.tgz "$STABLE_RELEASE_URL"
+    curl -L -o rootless.tgz "$STABLE_RELEASE_ROOTLESS_URL"
+  )
+  # Extract zipped archieve to /home/ubuntu/bin
+  (
+    mkdir -p "$USER_BIN"
+    cd "$USERBIN"
+    tar zxf "$tmp/docker.tgz" --strip-components=1
+    tar zxf "$tmp/rootless.tgz" --strip-components=1
+  )
+
+  print_instructions
+
+}
+
+install_docker_compose() {
+  desc="$HOME/bin/docker-compose"
+  curl -L "https://github.com/docker/compose/releases/download/1.26.0/docker-compose-$(uname -s)-$(uname -m)" -o "$desc"
+  if [ ! -f $desc ]; then
+    printf "Download docker-compose failed, error code 365"
+    exit 1
+  fi
+  chmod +x $desc
 
 }
 
 main() {
   ## logic workflow
   ## check dependices -> install docker -> install docker compose -> clone repository->build image -> start containers
+
+  # check if need to install docker
+  if [ -x "$(command -v docker)" ]; then
+    printf "docker installed"
+
+  else
+
+    printf "Installing docker..."
+    install_docker
+    # command
+  fi
+
+  # command
+  if [ -x "$(command -v docker-compose)" ]; then
+    printf "docker-compose installed"
+  else
+    printf "Install docker-compose..."
+    install_docker_compose
+    printf "Install docker-compose done"
+  fi
+
+  # check if need to install git
+
+  if [ -x "$(command -v git)" ]; then
+    printf "git installed"
+
+  else
+    printf "missing git,please install it before running this script"
+    exit 1
+
+  fi
+
 }
