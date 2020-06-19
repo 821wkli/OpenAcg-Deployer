@@ -61,7 +61,10 @@ docker-compose up -d
 
 ### Demo
 ![](./screenshots/demo.gif)
-Done, have fun :relaxed:
+
+
+<p>Done, have fun :relaxed:</p>
+
 ## Test api Example
 ```
 http://server-ip-address:8080/api/v1/novel/latest?offset=0&limit=20
