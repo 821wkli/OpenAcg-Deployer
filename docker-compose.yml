@@ -1,0 +1,33 @@
+version: '3'
+services:
+  web:
+    image: 821wkli/openacgweb:latest
+    container_name: openacg-web
+    restart: always
+    ports:
+      - 8080:8080
+    depends_on:
+      - backend
+
+  redis:
+    image: redis:latest
+    container_name: openacg-redis
+    expose: 
+      - 6379
+    volumes:
+      - ./data/redis:/data
+
+  backend:
+    image: 821wkli/openacg:latest
+    container_name: openacg-backend
+    expose:
+    - 8000
+    environment:
+      - DEBUG=false
+      - RPC=false
+      - WORKERS=1    ## for ec2 nano server, depends on cpu cores
+      - ASYNC=true   ## enable single event mode
+      - STREAMING_PROXY=true
+    depends_on:
+      - redis
+
