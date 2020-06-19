@@ -5,7 +5,7 @@ Deploy OpenAcg anywhere on any cloud service providers
 ## Server requirements
 <ol>
 <li>Ubuntu 18.04 or above</li>
-<li>Minimum 4GB memory and 2Vcpus</li>
+<li><b>Minimum 4GB memory and 2Vcpus, 8GB is preferrable</b></li>
 <li>git</li>
 <li>uidmap</li>
 <li>Inbound TCP port 8080 should open to public</li>
@@ -59,6 +59,9 @@ systemctl --user start docker
 docker-compose up -d
 ```
 
+### Demo
+![](./screenshots/demo.gif)
+Done, have fun :relaxed:
 ## Test api Example
 ```
 http://server-ip-address:8080/api/v1/novel/latest?offset=0&limit=20
